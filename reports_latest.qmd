@@ -1,0 +1,268 @@
+---
+title: "A Global UNICEF Report on Child Nutrition"
+author: "Aswini Thakkellapati | A00045842 | DCU"
+date: "2026-04-15"
+format:
+    html:
+        embed-resources: true
+        code-fold: true
+        theme: flatly
+        toc: true
+        toc-depth: 2
+        execute:
+            echo: false
+            warning: false
+            message: false
+---
+
+# Introduction
+
+Every child deserves access to nutritious food and a healthy start in life.
+Yet millions of children around the world still struggle to get the nutrition they need.
+
+This report explores:
+
+* 🥗 Access to protein-rich foods for children
+* 🌍 How nutrition varies across countries
+* 📉 Whether things are improving over time
+
+Using UNICEF data, we identify where children are most at risk and what factors influence these outcomes.
+
+---
+
+# Understanding the Data
+
+```{python}
+#| label: load-data
+
+import polars as pl
+from plotnine import *
+import warnings
+warnings.filterwarnings('ignore')
+
+ind1 = pl.read_csv("unicef_indicator_1.csv", schema_overrides={"time_period": pl.Utf8})
+meta = pl.read_csv("unicef_metadata.csv", schema_overrides={"year": pl.Utf8})
+
+ind1 = ind1.rename({col: col.strip() for col in ind1.columns})
+meta = meta.rename({col: col.strip() for col in meta.columns})
+
+ind1_total = ind1.filter(pl.col("sex") == "Total")
+
+ind1_total = ind1_total.rename({
+    "obs_value": "food_consumption_pct",
+    "time_period": "time_period_str",
+    "country": "country_name"
+})
+
+ind1_total = ind1_total.with_columns(
+    pl.col("time_period_str").str.extract(r"(\d{4})").cast(pl.Float64).alias("year")
+)
+
+meta_clean = meta.select([
+    "country", "alpha_3_code", "year",
+    "GDP per capita (constant 2015 US$)",
+    "Life expectancy at birth, total (years)"
+]).rename({
+    "country": "country_name_meta",
+    "GDP per capita (constant 2015 US$)": "gdp_per_capita",
+    "Life expectancy at birth, total (years)": "life_expectancy"
+})
+
+meta_clean = meta_clean.with_columns(
+    pl.col("year").cast(pl.Float64)
+)
+
+meta_clean = meta_clean.drop_nulls(subset=["gdp_per_capita", "life_expectancy"])
+
+merged = ind1_total.join(meta_clean, on=["alpha_3_code", "year"], how="inner")
+
+plot_data = merged.drop_nulls(subset=["food_consumption_pct", "gdp_per_capita"])
+```
+
+
+* Total observations: **276 country-year records**
+* Food consumption ranges from **11% to 94%**
+* Most data comes from **lower-income countries**
+* Median year: **2016 (recent data)**
+
+---
+
+# 1. Global Distribution of Child Nutrition (World Map)
+
+This map shows how access to nutritious food varies across the world.
+
+```{python}
+#| label: world-map
+#| fig-width: 12
+#| fig-height: 7
+#| fig-align: center
+
+import json
+import urllib.request
+import pandas as pd
+
+url = "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json"
+
+with urllib.request.urlopen(url) as response:
+    geo = json.load(response)
+
+rows = []
+group_id = 0
+
+for feature in geo["features"]:
+    code = feature["id"]
+    geom = feature["geometry"]
+
+    if geom is None:
+        continue
+
+    if geom["type"] == "Polygon":
+        for poly in geom["coordinates"]:
+            group_id += 1
+            for coord in poly:
+                rows.append({
+                    "alpha_3_code": code,
+                    "group_id": group_id,
+                    "long": coord[0],
+                    "lat": coord[1]
+                })
+
+    elif geom["type"] == "MultiPolygon":
+        for multi in geom["coordinates"]:
+            for poly in multi:
+                group_id += 1
+                for coord in poly:
+                    rows.append({
+                        "alpha_3_code": code,
+                        "group_id": group_id,
+                        "long": coord[0],
+                        "lat": coord[1]
+                    })
+
+map_df = pl.DataFrame(rows)
+
+latest = plot_data.sort("year", descending=True).group_by("alpha_3_code").first()
+
+map_data = map_df.join(latest, on="alpha_3_code", how="left")
+
+map_pd = map_data.to_pandas()
+
+(
+    ggplot(map_pd, aes(x='long', y='lat', group='group_id', fill='food_consumption_pct')) +
+    geom_polygon(color='white', size=0.1) +
+    scale_fill_gradientn(colors=['#EF476F', '#FFD166', '#06D6A0', '#118AB2']) +
+    theme_void()
+)
+```
+
+👉 Children in some regions—especially parts of Africa and South Asia—have significantly lower access to nutritious food.
+
+---
+
+# 2. GDP vs Nutrition (Scatter Plot)
+
+This chart shows how a country’s wealth relates to child nutrition.
+
+```{python}
+#| label: scatter
+#| fig-width: 10
+#| fig-height: 6
+#| fig-align: center
+
+scatter_pd = plot_data.to_pandas()
+
+(
+    ggplot(scatter_pd, aes(x='gdp_per_capita', y='food_consumption_pct')) +
+    geom_point(aes(color='food_consumption_pct'), alpha=0.6) +
+    geom_smooth(method='lm', color='#C73E1D', alpha=0.15) +
+    scale_x_log10() +
+    scale_color_gradientn(colors=['#EF476F','#FFD166','#06D6A0','#118AB2']) +
+    theme_minimal()
+)
+```
+
+👉 Wealthier countries tend to have better nutrition—but not always.
+
+---
+
+# 3. Has Nutrition Improved Over Time? (Trend)
+
+This chart shows how global nutrition has changed over the years.
+
+```{python}
+#| label: trend
+#| fig-width: 10
+#| fig-height: 6
+#| fig-align: center
+
+ts_data = plot_data.group_by("year").agg(
+    pl.col("food_consumption_pct").mean().alias("avg_consumption")
+)
+
+ts_pd = ts_data.to_pandas()
+
+(
+    ggplot(ts_pd, aes(x='year', y='avg_consumption')) +
+    geom_line(color='#2E86AB') +
+    geom_point(color='#A23B72') +
+    geom_smooth(method='lm', color='#F18F01', alpha=0.15) +
+    theme_minimal()
+)
+```
+
+👉 Nutrition is improving—but slowly and unevenly.
+
+---
+
+# 4. Nutrition by Income Group
+
+This chart compares nutrition levels across income groups.
+
+```{python}
+#| label: income
+#| fig-width: 9
+#| fig-height: 6
+#| fig-align: center
+
+latest = plot_data.sort("year", descending=True).group_by("alpha_3_code").first()
+
+latest = latest.with_columns(
+    pl.when(pl.col("gdp_per_capita") < 1000).then(pl.lit("Low"))
+    .when(pl.col("gdp_per_capita") < 4000).then(pl.lit("Lower-Middle"))
+    .when(pl.col("gdp_per_capita") < 12000).then(pl.lit("Upper-Middle"))
+    .otherwise(pl.lit("High"))
+    .alias("income_group")
+)
+
+grouped = latest.group_by("income_group").agg(
+    pl.col("food_consumption_pct").mean().alias("food_consumption_pct")
+)
+
+grouped = grouped.with_columns(
+    pl.col("food_consumption_pct").round(1).cast(pl.Utf8).alias("label")
+)
+
+grouped_pd = grouped.to_pandas()
+
+(
+    ggplot(grouped_pd, aes(x='income_group', y='food_consumption_pct', fill='income_group')) +
+    geom_col() +
+    geom_text(aes(label='label'), va='bottom') +
+    theme_minimal()
+)
+```
+
+👉 Lower-income countries clearly face greater challenges.
+
+---
+
+# Conclusion
+
+This report shows that:
+
+* Many countries still have low access to nutritious food
+* Wealth helps—but is not the only factor
+* Progress is happening, but slowly
+* Inequality remains a major issue
+
+Every child deserves equal access to nutrition and a healthy future 🌍
