@@ -1,7 +1,8 @@
 ---
-title: "A Global UNICEF Report on Child Nutrition"
+title: "When Children Face Nutritional Inequality"
+subtitle: "A UNICEF Data Analysis of Child Nutrition and Economic Disparities Worldwide"
 author: "Aswini Thakkellapati | A00045842 | DCU"
-date: "2026-04-15"
+date: 2026-04-15
 format:
     html:
         embed-resources: true
@@ -15,7 +16,7 @@ format:
             message: false
 ---
 
-# Introduction
+# 🌿 Introduction
 
 Every child deserves access to nutritious food and a healthy start in life.
 Yet millions of children around the world still struggle to get the nutrition they need.
@@ -89,7 +90,7 @@ plot_data = merged.drop_nulls(subset=["food_consumption_pct", "gdp_per_capita"])
 
 # 1. Global Distribution of Child Nutrition (World Map)
 
-This map shows how access to nutritious food varies across the world.
+This map describes a global overview of how child nutrition varies across countries.
 
 ```{python}
 #| label: world-map
@@ -155,7 +156,7 @@ map_pd = map_data.to_pandas()
 )
 ```
 
-👉 Children in some regions—especially parts of Africa and South Asia—have significantly lower access to nutritious food.
+📌 Children in some regions—especially parts of Africa and South Asia—have significantly lower access to nutritious food.
 
 ---
 
@@ -181,7 +182,7 @@ scatter_pd = plot_data.to_pandas()
 )
 ```
 
-👉 Wealthier countries tend to have better nutrition—but not always.
+📌 Economic growth improves nutrition—but not consistently across all countries.
 
 ---
 
@@ -210,7 +211,7 @@ ts_pd = ts_data.to_pandas()
 )
 ```
 
-👉 Nutrition is improving—but slowly and unevenly.
+📌 There is gradual improvement, but progress remains uneven.
 
 ---
 
@@ -245,14 +246,36 @@ grouped = grouped.with_columns(
 grouped_pd = grouped.to_pandas()
 
 (
-    ggplot(grouped_pd, aes(x='income_group', y='food_consumption_pct', fill='income_group')) +
-    geom_col() +
-    geom_text(aes(label='label'), va='bottom') +
-    theme_minimal()
+    ggplot(grouped_pd, aes(x='income_group', y='food_consumption_pct', fill='food_consumption_pct')) +
+    geom_col(width=0.7) +
+    
+    # ✅ SINGLE COLOR GRADIENT (PURPLE SHADES)
+    scale_fill_gradient(
+        low="#c8e6c9",   # light shade
+        high="#1b5e20"   # dark shade
+    ) +
+    
+    geom_text(
+        aes(label='label'),
+        va='bottom',
+        size=9
+    ) +
+    
+    theme_minimal() +
+    theme(legend_position="none")   # remove legend for cleaner look
 )
 ```
 
-👉 Lower-income countries clearly face greater challenges.
+📌 Lower-income countries clearly face greater challenges.
+
+---
+
+# 🔍 Key Findings
+
+* Wide inequality exists
+* Economic factors influence outcomes
+* Progress is uneven
+* Disparities remain
 
 ---
 

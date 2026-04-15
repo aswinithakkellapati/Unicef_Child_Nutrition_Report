@@ -1,0 +1,9 @@
+project:
+  type: website
+
+website:
+  title: "Child Nutrition Report"
+
+format:
+  html:
+    theme: flatly
